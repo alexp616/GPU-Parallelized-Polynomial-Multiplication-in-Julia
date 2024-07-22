@@ -6,6 +6,7 @@ using Dates
 
 import Base.div
 
+include("int256.jl")
 
 # Also exists to guarantee positive mod numbers so my chinese remainder theorem
 # doesn't get messed up
@@ -25,7 +26,7 @@ end
 
 div function for Int128's that can be called inside CUDA kernels, since Base.div can't
 """
-function div(n::Int128, m::Int128)::Int128
+function Base.div(n::Int128, m::Int128)::Int128
     if n == 0
         return Int128(0)
     end
@@ -67,7 +68,8 @@ function extended_gcd_iterative(a::T, b::T) where T<:Integer
 end
 
 function pregen_crt(primeArray::Vector{Int}, crtType::DataType)
-    result = zeros(crtType, 3, length(primeArray) - 1)
+    result = zeros(BigInt, 3, length(primeArray) - 1)
+    primeArray = BigInt.(primeArray)
     currmod = primeArray[1]
     # Iterate through, compute m1 and m2 for each modulus
     # store n1 * m1 and n2 * m2, since CRT is a1 * n1 * m1 + a1 * n2 * m2
@@ -80,7 +82,8 @@ function pregen_crt(primeArray::Vector{Int}, crtType::DataType)
         result[3, i - 1] = currmod
     end
 
-    return CuArray(result)
+    # return CuArray(result)
+    return CuArray(crtType.(result))
 end
 
 
@@ -174,7 +177,7 @@ end
 Return n ^ p mod m. Only gives accurate results when
 m is prime, since uses Fermat's Little Theorem
 """
-function power_mod(n::T, p::Integer, m::Integer) where T<:Integer
+function power_mod(n::Int, p::Int, m::Int)
     result = 1
     p = faster_mod(p, m - 1)
     base = faster_mod(n, m)

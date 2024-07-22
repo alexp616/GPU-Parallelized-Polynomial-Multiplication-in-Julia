@@ -1,8 +1,20 @@
 using CUDA
 using BenchmarkTools
-using BitIntegers
 
-function div(n::Int128, m::Int128) 
+import Base.div
+import Base.bitstring
+
+@inline function faster_mod(x::T, m::Integer)::T where T<:Integer
+    m = T(m)
+    r = x - div(x, m) * m
+    return r < 0 ? r + m : r
+end
+"""
+    div(n::Int128, m::Int128)::Int128
+
+div function for Int128's that can be called inside CUDA kernels, since Base.div can't
+"""
+function div(n::Int128, m::Int128)
     if n == 0
         return Int128(0)
     end
@@ -29,78 +41,22 @@ function div(n::Int128, m::Int128)
     return quotient * sign
 end
 
-function div(n::Int256, m::Int256) 
-    if n == 0
-        return Int256(0)
-    end
+function mod_kernel(arr::CuDeviceVector{Int128}, m::Int128)
+    tid = threadIdx().x + (blockIdx().x - 1) * blockDim().x
 
-    sign = 1
-    if (n < 0) != (m < 0)
-        sign = -1
-    end
-
-    n = abs(n)
-    m = abs(m)
-
-    quotient = Int256(0)
-    remainder = Int256(0)
-
-    for i in 0:255
-        remainder = (remainder << 1) | ((n >> (255 - i)) & 1)
-        if remainder >= m
-            remainder -= m
-            quotient |= (Int256(1) << (255 - i))
-        end
-    end
-
-    return quotient * sign
-end
-
-
-function reduce_mod_m_kernel(arr::CuDeviceVector{Int128, 1}, m::Int128)
-    idx = threadIdx().x + (blockIdx().x - 1) * blockDim().x
-    arr[idx] = faster_mod(arr[idx], m)
-
-    # using this one gives:
-    # ERROR: LLVM error: Undefined external symbol "__modti3"
-    # arr[idx] = arr[idx] % m
-    return
-end
-
-function div_kernel(arr, m)
-    idx = threadIdx().x
-    arr[idx] = div(arr[idx], m)
+    arr[tid] = mod(arr[tid], m)
 
     return
 end
 
 function test_broken_div()
-    # div works for Int128
-    arr = CuArray(Int128.([100]))
-    m = Int128(7)
-    @cuda threads = length(arr) div_kernel(arr, m) 
-    display(arr)
+    arr = CuArray(Int128.([10, 20, 30, 40]))
+    mod = Int128(7)
 
-    println("testing Int256 stuff: ")
-    arr = CuArray(Int256.([10]))
-    m = Int256(7)
+    @cuda threads=length(arr) blocks = 1 mod_kernel(arr, mod)
 
     display(arr)
-    # Addition works
-    arr .+= m
-    println("arr after addition: ")
-    display(arr)
-    # Multiplication works
-    # arr .*= m
-    # println("arr after multiplication: ")
-    # display(arr)
-
-    
-
-    # # Division doesn't work
-    # @cuda threads = length(arr) div_kernel(arr, m)
-
-    return arr
 end
 
 test_broken_div()
+

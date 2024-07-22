@@ -62,11 +62,9 @@ function gpu_pow(vec::CuVector{Int}, pow::Int; pregen::GPUPowPregen)
     multimodularResultArr = gpu_intt(stackedvec, pregen)
 
     # here for memories of debugging
-    # if pregen.len > 100000
-    #     # temp = Array(multimodularResultArr)
-    #     # temp[:, 156681] .= [11, 11, 11]
+    # if pregen.len > 4000000
     #     # multimodularResultArr = CuArray(temp)
-    #     println("three coeffs of term [17, 82, 5, 64]: ", Array(multimodularResultArr)[:, 156681])
+    #     println("three coeffs of term [20, 52, 56, 40]: ", CUDA.@allowscalar multimodularResultArr[:, 1608225])
     #     # println("two coeffs of term [15, 20, 39, 6]: ", Array(multimodularResultArr)[:, 257515])
     #     println("primearray: ", pregen.primeArray)
     # end
@@ -74,6 +72,10 @@ function gpu_pow(vec::CuVector{Int}, pow::Int; pregen::GPUPowPregen)
     # CRT
     result = build_result(multimodularResultArr, pregen.crtPregen, pregen.resultType)[1:finalLength]
 
+
+    # if pregen.len > 4000000
+    #     CUDA.@allowscalar result[1608225] = Int128(11)
+    # end
     return result
 end
 
@@ -207,7 +209,7 @@ function build_result_kernel(result::CuDeviceVector, multimodularResultArr::CuDe
     @inbounds begin
         x = multimodularResultArr[1, idx]
         for i in axes(pregen, 2)
-            x = mod(x * pregen[2, i] + multimodularResultArr[i + 1, idx] * pregen[1, i], pregen[3, i])
+            x = faster_mod(x * pregen[2, i] + multimodularResultArr[i + 1, idx] * pregen[1, i], pregen[3, i])
         end
         result[idx] = x
     end
